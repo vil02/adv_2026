@@ -1,0 +1,61 @@
+---
+name: python_test
+
+'on':
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python_test:
+    runs-on: ${{matrix.os}}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-26.04
+        python-version: [3.14]
+
+    steps:
+      - name: Checkout
+        if: "! github.event.pull_request.head.repo.fork "
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          submodules: 'recursive'
+          token: ${{ secrets.ADV_INPUTS }}
+
+      - name: Checkout (no submodule with inputs)
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install uv and setup python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          activate-environment: "true"
+
+      - name: Install dependencies
+        run: |
+          uv pip compile --extra dev --generate-hashes --output-file=requirements-dev.txt  pyproject.toml
+          uv lock
+          uv pip install --no-build --require-hashes -r requirements-dev.txt
+
+      - name: Run liter
+        run: |
+          ./check_all_python_files.sh
+
+      - name: Test with pytest
+        run: |
+          uv run --frozen --no-build pytest -n 2
+...
